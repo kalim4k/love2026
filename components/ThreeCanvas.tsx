@@ -15,8 +15,8 @@ const CONFIG = {
     red: 0x990000,
   },
   particles: {
-    count: 1400,
-    dustCount: 3000,
+    count: 1500,
+    dustCount: 8000, // Augmenté pour une meilleure visibilité des messages
     treeHeight: 24,
     treeRadius: 8
   },
@@ -81,10 +81,11 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
       });
     },
     updateHand: (x: number, y: number, detected: boolean, mode: SceneMode) => {
-      const prevState = stateRef.current.mode;
       stateRef.current.handX = x;
       stateRef.current.handY = y;
       stateRef.current.handDetected = detected;
+      
+      const prevState = stateRef.current.mode;
       stateRef.current.mode = mode;
 
       if (mode === 'FOCUS' && prevState !== 'FOCUS') {
@@ -126,26 +127,27 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
   const generatePointsFromText = (text: string, fontSize: number): THREE.Vector3[] => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 1000; canvas.height = 500;
+    canvas.width = 1200; canvas.height = 600;
     ctx.fillStyle = 'white';
     ctx.font = `bold ${fontSize}px Cinzel, serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     
-    if (text.length > 15) {
+    if (text.length > 12) {
       const words = text.split(' ');
       const mid = Math.ceil(words.length / 2);
-      ctx.fillText(words.slice(0, mid).join(' '), 500, 180);
-      ctx.fillText(words.slice(mid).join(' '), 500, 320);
+      ctx.fillText(words.slice(0, mid).join(' '), 600, 220);
+      ctx.fillText(words.slice(mid).join(' '), 600, 380);
     } else {
-      ctx.fillText(text, 500, 250);
+      ctx.fillText(text, 600, 300);
     }
 
-    const imgData = ctx.getImageData(0, 0, 1000, 500).data;
+    const imgData = ctx.getImageData(0, 0, 1200, 600).data;
     const points: THREE.Vector3[] = [];
-    for (let y = 0; y < 500; y += 8) {
-      for (let x = 0; x < 1000; x += 8) {
-        if (imgData[(y * 1000 + x) * 4 + 3] > 128) {
-          points.push(new THREE.Vector3((x - 500) * 0.06, -(y - 250) * 0.06, 0));
+    const step = 4; // Pas réduit pour augmenter la résolution du message
+    for (let y = 0; y < 600; y += step) {
+      for (let x = 0; x < 1200; x += step) {
+        if (imgData[(y * 1200 + x) * 4 + 3] > 128) {
+          points.push(new THREE.Vector3((x - 600) * 0.05, -(y - 300) * 0.05, 0));
         }
       }
     }
@@ -195,7 +197,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
       particlesRef.current.push(createParticleData(m, 'BASE', false));
     }
 
-    const dustMat = new THREE.MeshBasicMaterial({ color: 0xfff4d1, transparent: true, opacity: 0.5 });
+    const dustMat = new THREE.MeshBasicMaterial({ color: 0xfff4d1, transparent: true, opacity: 0.6 });
     const dustGeo = new THREE.OctahedronGeometry(0.12, 0);
     for (let i = 0; i < CONFIG.particles.dustCount; i++) {
       const m = new THREE.Mesh(dustGeo, dustMat.clone());
@@ -205,19 +207,17 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.8));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.85));
     composerRef.current = composer;
 
     const loadFormations = async () => {
-        try {
-            await document.fonts.ready;
-        } catch(e) {}
+        try { await document.fonts.ready; } catch(e) {}
         formationsRef.current.love = generatePointsFromText("Je t'aime", 140);
-        formationsRef.current.year = generatePointsFromText("Bonne Année 2026", 80);
+        formationsRef.current.year = generatePointsFromText("Bonne Année 2026", 110);
         const heart: THREE.Vector3[] = [];
-        for(let i=0; i<1200; i++) {
-          const t = (i/1200) * Math.PI * 2;
-          heart.push(new THREE.Vector3(16 * Math.pow(Math.sin(t), 3) * 0.75, (13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t)) * 0.75, 0));
+        for(let i=0; i<2000; i++) {
+          const t = (i/2000) * Math.PI * 2;
+          heart.push(new THREE.Vector3(16 * Math.pow(Math.sin(t), 3) * 0.85, (13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t)) * 0.85, 0));
         }
         formationsRef.current.heart = heart;
     };
@@ -230,8 +230,20 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
       const state = stateRef.current;
 
       const isMsg = state.mode.startsWith('MESSAGE');
-      state.rotationY += (state.mode === 'SCATTER' ? 0.05 : isMsg ? 0.02 : 0.2) * dt;
-      mainGroup.rotation.y = state.rotationY;
+      
+      // ROTATION CONTROL: Influence de la main
+      if (state.handDetected) {
+        // Rotation basée sur la position de la main (Lissage avec lerp)
+        const targetRotY = state.handX * 1.5;
+        const targetRotX = -state.handY * 0.8;
+        mainGroup.rotation.y = THREE.MathUtils.lerp(mainGroup.rotation.y, targetRotY, 5 * dt);
+        mainGroup.rotation.x = THREE.MathUtils.lerp(mainGroup.rotation.x, targetRotX, 5 * dt);
+      } else {
+        // Rotation automatique si aucune main n'est là
+        state.rotationY += (state.mode === 'SCATTER' ? 0.05 : isMsg ? 0.02 : 0.2) * dt;
+        mainGroup.rotation.y = state.rotationY;
+        mainGroup.rotation.x = THREE.MathUtils.lerp(mainGroup.rotation.x, 0, 2 * dt);
+      }
 
       let formation: THREE.Vector3[] = [];
       if (state.mode === 'MESSAGE_LOVE') formation = formationsRef.current.love;
@@ -246,9 +258,11 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
 
         if (p.isDust && formation.length > 0) {
           const fPos = formation[dIdx % formation.length];
-          const world = new THREE.Vector3(fPos.x, fPos.y, 25);
+          const world = new THREE.Vector3(fPos.x, fPos.y, 20); // Un peu plus proche pour plus de clarté
           target = world.applyMatrix4(mainGroup.matrixWorld.clone().invert());
-          scale = 1.0; lerp = 8.0; dIdx++;
+          scale = 1.2; 
+          lerp = 8.0; 
+          dIdx++;
         }
 
         if (state.mode === 'FOCUS' && p.mesh === state.focusTarget) {

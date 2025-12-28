@@ -15,8 +15,8 @@ const CONFIG = {
     red: 0x990000,
   },
   particles: {
-    count: 1200,
-    dustCount: 2500,
+    count: 1400,
+    dustCount: 3000,
     treeHeight: 24,
     treeRadius: 8
   },
@@ -126,7 +126,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
   const generatePointsFromText = (text: string, fontSize: number): THREE.Vector3[] => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 1000; canvas.height = 500;
+    canvas.width = 1200; canvas.height = 600;
     ctx.fillStyle = 'white';
     ctx.font = `bold ${fontSize}px Cinzel, serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -134,18 +134,19 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     if (text.length > 15) {
       const words = text.split(' ');
       const mid = Math.ceil(words.length / 2);
-      ctx.fillText(words.slice(0, mid).join(' '), 500, 180);
-      ctx.fillText(words.slice(mid).join(' '), 500, 320);
+      ctx.fillText(words.slice(0, mid).join(' '), 600, 220);
+      ctx.fillText(words.slice(mid).join(' '), 600, 380);
     } else {
-      ctx.fillText(text, 500, 250);
+      ctx.fillText(text, 600, 300);
     }
 
-    const imgData = ctx.getImageData(0, 0, 1000, 500).data;
+    const imgData = ctx.getImageData(0, 0, 1200, 600).data;
     const points: THREE.Vector3[] = [];
-    for (let y = 0; y < 500; y += 8) {
-      for (let x = 0; x < 1000; x += 8) {
-        if (imgData[(y * 1000 + x) * 4 + 3] > 128) {
-          points.push(new THREE.Vector3((x - 500) * 0.06, -(y - 250) * 0.06, 0));
+    const step = 8;
+    for (let y = 0; y < 600; y += step) {
+      for (let x = 0; x < 1200; x += step) {
+        if (imgData[(y * 1200 + x) * 4 + 3] > 128) {
+          points.push(new THREE.Vector3((x - 600) * 0.05, -(y - 300) * 0.05, 0));
         }
       }
     }
@@ -157,14 +158,14 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
-    scene.fog = new THREE.FogExp2(0x000000, 0.012);
+    scene.fog = new THREE.FogExp2(0x000000, 0.015);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = CONFIG.camera.z;
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -179,13 +180,13 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     mainGroup.add(photoGroupRef.current);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    const light = new THREE.DirectionalLight(0xffffff, 1);
+    const light = new THREE.DirectionalLight(0xffffff, 1.2);
     light.position.set(5, 10, 7);
     scene.add(light);
 
-    const goldMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.gold, metalness: 0.9 });
-    const greenMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.green });
-    const redMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.red });
+    const goldMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.gold, metalness: 0.9, roughness: 0.1 });
+    const greenMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.green, roughness: 0.8 });
+    const redMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.red, metalness: 0.5 });
     const sphere = new THREE.SphereGeometry(0.4, 8, 8);
 
     for (let i = 0; i < CONFIG.particles.count; i++) {
@@ -205,26 +206,29 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.4, 0.8));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.8));
     composerRef.current = composer;
 
-    // Load formations after a short delay to ensure fonts (if possible)
-    setTimeout(() => {
-      formationsRef.current.love = generatePointsFromText("Je t'aime", 120);
-      formationsRef.current.year = generatePointsFromText("Bonne Année 2026", 80);
-      const heart: THREE.Vector3[] = [];
-      for(let i=0; i<1000; i++) {
-        const t = (i/1000) * Math.PI * 2;
-        heart.push(new THREE.Vector3(16 * Math.pow(Math.sin(t), 3) * 0.7, (13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t)) * 0.7, 0));
-      }
-      formationsRef.current.heart = heart;
-    }, 1000);
+    // Load formations gracefully
+    const loadFormations = async () => {
+        try {
+            await document.fonts.ready;
+        } catch(e) {}
+        formationsRef.current.love = generatePointsFromText("Je t'aime", 140);
+        formationsRef.current.year = generatePointsFromText("Bonne Année 2026", 80);
+        const heart: THREE.Vector3[] = [];
+        for(let i=0; i<1200; i++) {
+          const t = (i/1200) * Math.PI * 2;
+          heart.push(new THREE.Vector3(16 * Math.pow(Math.sin(t), 3) * 0.75, (13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t)) * 0.75, 0));
+        }
+        formationsRef.current.heart = heart;
+    };
+    loadFormations();
 
     let frameId: number;
     const animate = () => {
       frameId = requestAnimationFrame(animate);
       const dt = clock.current.getDelta();
-      const time = clock.current.elapsedTime;
       const state = stateRef.current;
 
       const isMsg = state.mode.startsWith('MESSAGE');
@@ -246,7 +250,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
           const fPos = formation[dIdx % formation.length];
           const world = new THREE.Vector3(fPos.x, fPos.y, 25);
           target = world.applyMatrix4(mainGroup.matrixWorld.clone().invert());
-          scale = 1.0; lerp = 7.0; dIdx++;
+          scale = 1.0; lerp = 8.0; dIdx++;
         }
 
         if (state.mode === 'FOCUS' && p.mesh === state.focusTarget) {

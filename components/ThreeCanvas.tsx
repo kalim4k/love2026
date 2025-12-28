@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
@@ -9,20 +10,17 @@ import { SceneMode, AppState } from '../types';
 const CONFIG = {
   colors: {
     bg: 0x000000,
-    champagneGold: 0xffd966,
-    deepGreen: 0x03180a,
-    accentRed: 0x990000,
-    brightGold: 0xfff2a1,
+    gold: 0xffd966,
+    green: 0x03180a,
+    red: 0x990000,
   },
   particles: {
-    count: 1200,
-    dustCount: 2500,
+    count: 1400,
+    dustCount: 3000,
     treeHeight: 24,
     treeRadius: 8
   },
-  camera: {
-    z: 50
-  }
+  camera: { z: 50 }
 };
 
 export interface ThreeCanvasHandle {
@@ -33,10 +31,10 @@ export interface ThreeCanvasHandle {
 
 const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const composerRef = useRef<EffectComposer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const mainGroupRef = useRef<THREE.Group>(new THREE.Group());
   const photoGroupRef = useRef<THREE.Group>(new THREE.Group());
   const particlesRef = useRef<any[]>([]);
@@ -64,10 +62,22 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     addPhoto: (url: string) => {
-      const loader = new THREE.TextureLoader();
-      loader.load(url, (texture) => {
+      new THREE.TextureLoader().load(url, (texture) => {
         texture.colorSpace = THREE.SRGBColorSpace;
-        createPhotoMesh(texture);
+        const group = new THREE.Group();
+        const frame = new THREE.Mesh(
+          new THREE.BoxGeometry(1.7, 1.7, 0.1),
+          new THREE.MeshStandardMaterial({ color: CONFIG.colors.gold, metalness: 0.8, roughness: 0.2 })
+        );
+        const photo = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.5, 1.5),
+          new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+        );
+        photo.position.z = 0.06;
+        group.add(frame, photo);
+        group.scale.setScalar(0.8);
+        photoGroupRef.current.add(group);
+        particlesRef.current.push(createParticleData(group, 'PHOTO', false));
       });
     },
     updateHand: (x: number, y: number, detected: boolean, mode: SceneMode) => {
@@ -78,311 +88,196 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
       stateRef.current.mode = mode;
 
       if (mode === 'FOCUS' && prevState !== 'FOCUS') {
-        pickRandomPhoto();
+        const photos = photoGroupRef.current.children;
+        if (photos.length > 0) stateRef.current.focusTarget = photos[Math.floor(Math.random() * photos.length)];
       } else if (mode !== 'FOCUS') {
         stateRef.current.focusTarget = null;
       }
     },
     setMode: (mode: SceneMode) => {
       stateRef.current.mode = mode;
-      if (mode !== 'FOCUS') stateRef.current.focusTarget = null;
+      stateRef.current.focusTarget = null;
     }
   }));
 
-  const generatePointsFromText = (text: string, fontSize: number, spacing: number = 0.75): THREE.Vector3[] => {
+  const createParticleData = (mesh: THREE.Object3D, type: string, isDust: boolean) => {
+    const data: any = {
+      mesh, type, isDust,
+      posTree: new THREE.Vector3(),
+      posScatter: new THREE.Vector3(),
+      baseScale: mesh.scale.x,
+      spinSpeed: new THREE.Vector3((Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5)
+    };
+
+    const h = CONFIG.particles.treeHeight;
+    const t = Math.pow(Math.random(), 0.7);
+    const y = (t * h) - (h / 2);
+    const rMax = Math.max(1.0, CONFIG.particles.treeRadius * (1.1 - t));
+    const angle = t * 35 * Math.PI + Math.random() * Math.PI * 2;
+    data.posTree.set(Math.cos(angle) * rMax, y, Math.sin(angle) * rMax);
+
+    const rScatter = 20 + Math.random() * 25;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    data.posScatter.set(rScatter * Math.sin(phi) * Math.cos(theta), rScatter * Math.sin(phi) * Math.sin(theta), rScatter * Math.cos(phi));
+    return data;
+  };
+
+  const generatePointsFromText = (text: string, fontSize: number): THREE.Vector3[] => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 1200;
-    canvas.height = 600;
-    
+    canvas.width = 1000; canvas.height = 500;
     ctx.fillStyle = 'white';
     ctx.font = `bold ${fontSize}px Cinzel, serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     
-    // Smart line breaking for long greetings
     if (text.length > 15) {
-        const words = text.split(' ');
-        const mid = Math.ceil(words.length / 2);
-        const line1 = words.slice(0, mid).join(' ');
-        const line2 = words.slice(mid).join(' ');
-        ctx.fillText(line1, 600, 220);
-        ctx.fillText(line2, 600, 380);
+      const words = text.split(' ');
+      const mid = Math.ceil(words.length / 2);
+      ctx.fillText(words.slice(0, mid).join(' '), 500, 180);
+      ctx.fillText(words.slice(mid).join(' '), 500, 320);
     } else {
-        ctx.fillText(text, 600, 300);
+      ctx.fillText(text, 500, 250);
     }
 
-    const imageData = ctx.getImageData(0, 0, 1200, 600).data;
+    const imgData = ctx.getImageData(0, 0, 1000, 500).data;
     const points: THREE.Vector3[] = [];
-    
-    for (let y = 0; y < 600; y += 6) {
-      for (let x = 0; x < 1200; x += 6) {
-        const alpha = imageData[(y * 1200 + x) * 4 + 3];
-        if (alpha > 128) {
-          points.push(new THREE.Vector3(
-            (x - 600) * 0.07 * spacing, 
-            -(y - 300) * 0.07 * spacing, 
-            0
-          ));
+    for (let y = 0; y < 500; y += 8) {
+      for (let x = 0; x < 1000; x += 8) {
+        if (imgData[(y * 1000 + x) * 4 + 3] > 128) {
+          points.push(new THREE.Vector3((x - 500) * 0.06, -(y - 250) * 0.06, 0));
         }
       }
     }
     return points;
-  };
-
-  const generateHeartPoints = (count: number): THREE.Vector3[] => {
-    const points: THREE.Vector3[] = [];
-    for (let i = 0; i < count; i++) {
-        const t = (i / count) * Math.PI * 2;
-        const x = 16 * Math.pow(Math.sin(t), 3);
-        const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-        points.push(new THREE.Vector3(x * 0.85, y * 0.85, 0));
-    }
-    return points;
-  };
-
-  const createPhotoMesh = (texture: THREE.Texture) => {
-    const frameGeo = new THREE.BoxGeometry(1.7, 1.7, 0.12);
-    const frameMat = new THREE.MeshStandardMaterial({ 
-      color: CONFIG.colors.champagneGold, 
-      metalness: 1.0, 
-      roughness: 0.05
-    });
-    const frame = new THREE.Mesh(frameGeo, frameMat);
-
-    const photoGeo = new THREE.PlaneGeometry(1.5, 1.5);
-    const photoMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-    const photo = new THREE.Mesh(photoGeo, photoMat);
-    photo.position.z = 0.07;
-
-    const group = new THREE.Group();
-    group.add(frame);
-    group.add(photo);
-    group.scale.setScalar(0.8);
-    
-    photoGroupRef.current.add(group);
-    const p = createParticleData(group, 'PHOTO', false);
-    particlesRef.current.push(p);
-  };
-
-  const pickRandomPhoto = () => {
-    const photos = photoGroupRef.current.children;
-    if (photos.length > 0) {
-      const randomIndex = Math.floor(Math.random() * photos.length);
-      stateRef.current.focusTarget = photos[randomIndex];
-    }
-  };
-
-  const createParticleData = (mesh: THREE.Object3D, type: string, isDust: boolean) => {
-    const data: any = {
-      mesh,
-      type,
-      isDust,
-      posTree: new THREE.Vector3(),
-      posScatter: new THREE.Vector3(),
-      baseScale: mesh.scale.x,
-      spinSpeed: new THREE.Vector3(
-        (Math.random() - 0.5) * (type === 'PHOTO' ? 0.3 : 2.0),
-        (Math.random() - 0.5) * (type === 'PHOTO' ? 0.3 : 2.0),
-        (Math.random() - 0.5) * (type === 'PHOTO' ? 0.3 : 2.0)
-      )
-    };
-
-    const h = CONFIG.particles.treeHeight;
-    let t = Math.random();
-    t = Math.pow(t, 0.8);
-    const y = (t * h) - (h / 2);
-    let rMax = CONFIG.particles.treeRadius * (1.1 - t);
-    if (rMax < 1.0) rMax = 1.0;
-    const angle = t * 40 * Math.PI + Math.random() * Math.PI * 2;
-    const r = rMax * (0.8 + Math.random() * 0.4);
-    data.posTree.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
-
-    let rScatter = isDust ? (20 + Math.random() * 30) : (15 + Math.random() * 20);
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    data.posScatter.set(
-      rScatter * Math.sin(phi) * Math.cos(theta),
-      rScatter * Math.sin(phi) * Math.sin(theta),
-      rScatter * Math.cos(phi)
-    );
-
-    return data;
   };
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Initialize Formations
-    formationsRef.current.love = generatePointsFromText("Je t'aime", 120);
-    formationsRef.current.year = generatePointsFromText("Bonne et heureuse année 2026", 70);
-    formationsRef.current.heart = generateHeartPoints(1000);
-
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    scene.fog = new THREE.FogExp2(0x000000, 0.015);
     sceneRef.current = scene;
-    scene.background = new THREE.Color(CONFIG.colors.bg);
-    scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.015);
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = CONFIG.camera.z;
     cameraRef.current = camera;
-    camera.position.set(0, 0, CONFIG.camera.z);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    rendererRef.current = renderer;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.5;
     containerRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
     const mainGroup = mainGroupRef.current;
     scene.add(mainGroup);
     mainGroup.add(photoGroupRef.current);
 
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-    
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    const spotGold = new THREE.SpotLight(0xffeeba, 3000);
-    spotGold.position.set(20, 50, 40);
-    scene.add(spotGold);
+    const light = new THREE.DirectionalLight(0xffffff, 1.2);
+    light.position.set(5, 10, 7);
+    scene.add(light);
 
-    // Initial Base Particles
-    const sphereGeo = new THREE.SphereGeometry(0.5, 12, 12);
-    const boxGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const goldMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.champagneGold, metalness: 1.0, roughness: 0.1 });
-    const greenMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.deepGreen, metalness: 0.1, roughness: 0.8 });
-    const redMat = new THREE.MeshPhysicalMaterial({ color: CONFIG.colors.accentRed, metalness: 0.3, roughness: 0.2, clearcoat: 1.0 });
+    const goldMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.gold, metalness: 0.9, roughness: 0.1 });
+    const greenMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.green, roughness: 0.8 });
+    const redMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.red, metalness: 0.5 });
+    const sphere = new THREE.SphereGeometry(0.4, 8, 8);
 
     for (let i = 0; i < CONFIG.particles.count; i++) {
-      const rand = Math.random();
-      const mesh = new THREE.Mesh(rand < 0.6 ? boxGeo : sphereGeo, rand < 0.4 ? greenMat : rand < 0.8 ? goldMat : redMat);
-      mesh.scale.setScalar(0.3 + Math.random() * 0.7);
-      mainGroup.add(mesh);
-      particlesRef.current.push(createParticleData(mesh, 'BASE', false));
+      const m = new THREE.Mesh(sphere, Math.random() > 0.7 ? redMat : Math.random() > 0.3 ? goldMat : greenMat);
+      m.scale.setScalar(0.4 + Math.random() * 0.8);
+      mainGroup.add(m);
+      particlesRef.current.push(createParticleData(m, 'BASE', false));
     }
 
-    // Dust for Formations
-    const dustGeo = new THREE.TetrahedronGeometry(0.15, 0);
-    const dustMat = new THREE.MeshBasicMaterial({ color: 0xfff4d1, transparent: true, opacity: 0.6 });
+    const dustMat = new THREE.MeshBasicMaterial({ color: 0xfff4d1, transparent: true, opacity: 0.5 });
+    const dustGeo = new THREE.OctahedronGeometry(0.12, 0);
     for (let i = 0; i < CONFIG.particles.dustCount; i++) {
-      const mesh = new THREE.Mesh(dustGeo, dustMat.clone());
-      mainGroup.add(mesh);
-      particlesRef.current.push(createParticleData(mesh, 'DUST', true));
+      const m = new THREE.Mesh(dustGeo, dustMat.clone());
+      mainGroup.add(m);
+      particlesRef.current.push(createParticleData(m, 'DUST', true));
     }
 
-    // Tree Star
-    const star = new THREE.Mesh(
-      new THREE.OctahedronGeometry(1.8, 0),
-      new THREE.MeshStandardMaterial({ color: 0xfff2a1, emissive: 0xffcc00, emissiveIntensity: 4.0 })
-    );
-    star.position.y = CONFIG.particles.treeHeight / 2 + 1.2;
-    mainGroup.add(star);
-
-    // Post Processing
-    const renderScene = new RenderPass(scene, camera);
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.8);
-    bloomPass.strength = 0.8;
     const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.8));
     composerRef.current = composer;
-    composer.addPass(renderScene);
-    composer.addPass(bloomPass);
 
+    const loadFormations = async () => {
+        try {
+            await document.fonts.ready;
+        } catch(e) {}
+        formationsRef.current.love = generatePointsFromText("Je t'aime", 140);
+        formationsRef.current.year = generatePointsFromText("Bonne Année 2026", 80);
+        const heart: THREE.Vector3[] = [];
+        for(let i=0; i<1200; i++) {
+          const t = (i/1200) * Math.PI * 2;
+          heart.push(new THREE.Vector3(16 * Math.pow(Math.sin(t), 3) * 0.75, (13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t)) * 0.75, 0));
+        }
+        formationsRef.current.heart = heart;
+    };
+    loadFormations();
+
+    let frameId: number;
     const animate = () => {
-      requestAnimationFrame(animate);
+      frameId = requestAnimationFrame(animate);
       const dt = clock.current.getDelta();
-      const time = clock.current.elapsedTime;
       const state = stateRef.current;
 
-      const isInMessageMode = ['MESSAGE_LOVE', 'MESSAGE_YEAR', 'MESSAGE_HEART'].includes(state.mode);
-      
-      // Handle Rotation
-      if (state.mode === 'SCATTER' && state.handDetected) {
-          state.rotationY += (state.handX * 4.0 - state.rotationY) * 2.5 * dt;
-      } else {
-          const rotationSpeed = (state.mode === 'TREE' ? 0.3 : isInMessageMode ? 0.05 : 0.1);
-          state.rotationY += rotationSpeed * dt;
-      }
-      
+      const isMsg = state.mode.startsWith('MESSAGE');
+      state.rotationY += (state.mode === 'SCATTER' ? 0.05 : isMsg ? 0.02 : 0.2) * dt;
       mainGroup.rotation.y = state.rotationY;
 
-      let currentFormation: THREE.Vector3[] = [];
-      if (state.mode === 'MESSAGE_LOVE') currentFormation = formationsRef.current.love;
-      if (state.mode === 'MESSAGE_YEAR') currentFormation = formationsRef.current.year;
-      if (state.mode === 'MESSAGE_HEART') currentFormation = formationsRef.current.heart;
+      let formation: THREE.Vector3[] = [];
+      if (state.mode === 'MESSAGE_LOVE') formation = formationsRef.current.love;
+      if (state.mode === 'MESSAGE_YEAR') formation = formationsRef.current.year;
+      if (state.mode === 'MESSAGE_HEART') formation = formationsRef.current.heart;
 
-      let dustCounter = 0;
+      let dIdx = 0;
+      particlesRef.current.forEach((p) => {
+        let target = (state.mode === 'TREE') ? p.posTree : p.posScatter;
+        let scale = p.baseScale;
+        let lerp = 3.0;
 
-      particlesRef.current.forEach((p, idx) => {
-        let targetPos = (state.mode === 'TREE') ? p.posTree : p.posScatter;
-        let targetScale = p.baseScale;
-        let lerpFactor = 2.5;
-
-        // Message Handling
-        if (p.isDust && currentFormation.length > 0) {
-            const pointIdx = dustCounter % currentFormation.length;
-            const rawTarget = currentFormation[pointIdx];
-            
-            // Project to foreground (Z=30)
-            const heroWorldPos = new THREE.Vector3(rawTarget.x, rawTarget.y, 30);
-            const invMatrix = new THREE.Matrix4().copy(mainGroup.matrixWorld).invert();
-            targetPos = heroWorldPos.applyMatrix4(invMatrix);
-            
-            targetScale = 0.8;
-            lerpFactor = 8.0; 
-            
-            if (p.mesh.material) {
-                p.mesh.material.opacity = 1.0;
-                if (state.mode === 'MESSAGE_HEART') {
-                    p.mesh.material.color.setHex(0xff0000);
-                    p.mesh.scale.setScalar(targetScale * (1.1 + Math.sin(time * 6) * 0.2));
-                } else {
-                    p.mesh.material.color.setHex(0xfff4d1);
-                }
-            }
-            dustCounter++;
-        } else if (p.isDust) {
-            if (p.mesh.material) p.mesh.material.opacity = 0.5;
+        if (p.isDust && formation.length > 0) {
+          const fPos = formation[dIdx % formation.length];
+          const world = new THREE.Vector3(fPos.x, fPos.y, 25);
+          target = world.applyMatrix4(mainGroup.matrixWorld.clone().invert());
+          scale = 1.0; lerp = 8.0; dIdx++;
         }
 
-        // Photo Focus Logic
         if (state.mode === 'FOCUS' && p.mesh === state.focusTarget) {
-            const heroWorldPos = new THREE.Vector3(0, 0, 32);
-            const invMatrix = new THREE.Matrix4().copy(mainGroup.matrixWorld).invert();
-            targetPos = heroWorldPos.applyMatrix4(invMatrix);
-            targetScale = 6.0; 
-            lerpFactor = 6.0;
-            p.mesh.lookAt(camera.position);
+          target = new THREE.Vector3(0,0,35).applyMatrix4(mainGroup.matrixWorld.clone().invert());
+          scale = 5.0; lerp = 6.0; p.mesh.lookAt(camera.position);
         } else if (state.mode === 'FOCUS') {
-            targetScale *= 0.3;
+          scale *= 0.2;
         }
 
-        p.mesh.position.lerp(targetPos, lerpFactor * dt);
-        p.mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 4.0 * dt);
-
-        if (p.mesh !== state.focusTarget && !isInMessageMode) {
-            p.mesh.rotation.x += p.spinSpeed.x * dt;
-            p.mesh.rotation.y += p.spinSpeed.y * dt;
-        }
+        p.mesh.position.lerp(target, lerp * dt);
+        p.mesh.scale.lerp(new THREE.Vector3(scale, scale, scale), 4 * dt);
       });
 
       composer.render();
     };
     animate();
 
-    const handleResize = () => {
-        if (!camera || !renderer || !composer) return;
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        composer.setSize(window.innerWidth, window.innerHeight);
+    const resize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
     };
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', resize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', resize);
       renderer.dispose();
-      if (containerRef.current) containerRef.current.removeChild(renderer.domElement);
     };
   }, []);
 

@@ -1,11 +1,16 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// Sécurité pour éviter le crash au chargement si process.env n'est pas défini
 const getAI = () => {
-  const apiKey = typeof process !== 'undefined' && process.env && process.env.API_KEY 
-    ? process.env.API_KEY 
-    : "";
+  let apiKey = "";
+  try {
+    // Vérification sécurisée de process.env qui n'existe pas nativement en navigateur
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      apiKey = process.env.API_KEY;
+    }
+  } catch (e) {
+    console.warn("API Key could not be accessed from environment.");
+  }
   return new GoogleGenAI({ apiKey });
 };
 

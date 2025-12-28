@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
@@ -17,7 +16,7 @@ const CONFIG = {
   },
   particles: {
     count: 1200,
-    dustCount: 2200,
+    dustCount: 2500,
     treeHeight: 24,
     treeRadius: 8
   },
@@ -101,12 +100,14 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
-    // Split intelligent pour les textes longs
+    // Smart line breaking for long greetings
     if (text.length > 15) {
         const words = text.split(' ');
         const mid = Math.ceil(words.length / 2);
-        ctx.fillText(words.slice(0, mid).join(' '), 600, 220);
-        ctx.fillText(words.slice(mid).join(' '), 600, 380);
+        const line1 = words.slice(0, mid).join(' ');
+        const line2 = words.slice(mid).join(' ');
+        ctx.fillText(line1, 600, 220);
+        ctx.fillText(line2, 600, 380);
     } else {
         ctx.fillText(text, 600, 300);
     }
@@ -136,20 +137,8 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
         const x = 16 * Math.pow(Math.sin(t), 3);
         const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
         points.push(new THREE.Vector3(x * 0.85, y * 0.85, 0));
-        if (i % 2 === 0) {
-            const r = Math.random();
-            points.push(new THREE.Vector3(x * 0.85 * r, y * 0.85 * r, (Math.random() - 0.5) * 5));
-        }
     }
     return points;
-  };
-
-  const pickRandomPhoto = () => {
-    const photos = photoGroupRef.current.children;
-    if (photos.length > 0) {
-      const randomIndex = Math.floor(Math.random() * photos.length);
-      stateRef.current.focusTarget = photos[randomIndex];
-    }
   };
 
   const createPhotoMesh = (texture: THREE.Texture) => {
@@ -157,9 +146,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     const frameMat = new THREE.MeshStandardMaterial({ 
       color: CONFIG.colors.champagneGold, 
       metalness: 1.0, 
-      roughness: 0.05,
-      emissive: CONFIG.colors.champagneGold,
-      emissiveIntensity: 0.1
+      roughness: 0.05
     });
     const frame = new THREE.Mesh(frameGeo, frameMat);
 
@@ -172,12 +159,18 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     group.add(frame);
     group.add(photo);
     group.scale.setScalar(0.8);
-    group.userData.isPhoto = true;
-    group.userData.frameMat = frameMat;
-
+    
     photoGroupRef.current.add(group);
     const p = createParticleData(group, 'PHOTO', false);
     particlesRef.current.push(p);
+  };
+
+  const pickRandomPhoto = () => {
+    const photos = photoGroupRef.current.children;
+    if (photos.length > 0) {
+      const randomIndex = Math.floor(Math.random() * photos.length);
+      stateRef.current.focusTarget = photos[randomIndex];
+    }
   };
 
   const createParticleData = (mesh: THREE.Object3D, type: string, isDust: boolean) => {
@@ -205,7 +198,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     const r = rMax * (0.8 + Math.random() * 0.4);
     data.posTree.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
 
-    let rScatter = isDust ? (18 + Math.random() * 30) : (12 + Math.random() * 20);
+    let rScatter = isDust ? (20 + Math.random() * 30) : (15 + Math.random() * 20);
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     data.posScatter.set(
@@ -220,15 +213,15 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // "Bonne et heureuse année 2026" réduit pour fit l'écran
+    // Initialize Formations
     formationsRef.current.love = generatePointsFromText("Je t'aime", 120);
-    formationsRef.current.year = generatePointsFromText("Bonne et heureuse année 2026", 65);
+    formationsRef.current.year = generatePointsFromText("Bonne et heureuse année 2026", 70);
     formationsRef.current.heart = generateHeartPoints(1000);
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
     scene.background = new THREE.Color(CONFIG.colors.bg);
-    scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.012);
+    scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.015);
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
     cameraRef.current = camera;
@@ -239,7 +232,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 2.0;
+    renderer.toneMappingExposure = 1.5;
     containerRef.current.appendChild(renderer.domElement);
 
     const mainGroup = mainGroupRef.current;
@@ -249,11 +242,12 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     const spotGold = new THREE.SpotLight(0xffeeba, 3000);
     spotGold.position.set(20, 50, 40);
     scene.add(spotGold);
 
+    // Initial Base Particles
     const sphereGeo = new THREE.SphereGeometry(0.5, 12, 12);
     const boxGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
     const goldMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.champagneGold, metalness: 1.0, roughness: 0.1 });
@@ -268,6 +262,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
       particlesRef.current.push(createParticleData(mesh, 'BASE', false));
     }
 
+    // Dust for Formations
     const dustGeo = new THREE.TetrahedronGeometry(0.15, 0);
     const dustMat = new THREE.MeshBasicMaterial({ color: 0xfff4d1, transparent: true, opacity: 0.6 });
     for (let i = 0; i < CONFIG.particles.dustCount; i++) {
@@ -276,16 +271,18 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
       particlesRef.current.push(createParticleData(mesh, 'DUST', true));
     }
 
+    // Tree Star
     const star = new THREE.Mesh(
       new THREE.OctahedronGeometry(1.8, 0),
-      new THREE.MeshStandardMaterial({ color: 0xfff2a1, emissive: 0xffcc00, emissiveIntensity: 5.0 })
+      new THREE.MeshStandardMaterial({ color: 0xfff2a1, emissive: 0xffcc00, emissiveIntensity: 4.0 })
     );
     star.position.y = CONFIG.particles.treeHeight / 2 + 1.2;
     mainGroup.add(star);
 
+    // Post Processing
     const renderScene = new RenderPass(scene, camera);
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.8);
-    bloomPass.strength = 0.7;
+    bloomPass.strength = 0.8;
     const composer = new EffectComposer(renderer);
     composerRef.current = composer;
     composer.addPass(renderScene);
@@ -299,18 +296,15 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
 
       const isInMessageMode = ['MESSAGE_LOVE', 'MESSAGE_YEAR', 'MESSAGE_HEART'].includes(state.mode);
       
-      // ROTATION CONTROLS
+      // Handle Rotation
       if (state.mode === 'SCATTER' && state.handDetected) {
-          // Amplification du mouvement horizontal de la main
-          const targetRotY = state.handX * 4.0; 
-          state.rotationY += (targetRotY - state.rotationY) * 3.5 * dt;
+          state.rotationY += (state.handX * 4.0 - state.rotationY) * 2.5 * dt;
       } else {
-          const rotationSpeed = (state.mode === 'TREE' ? 0.25 : isInMessageMode ? 0.05 : 0.08);
+          const rotationSpeed = (state.mode === 'TREE' ? 0.3 : isInMessageMode ? 0.05 : 0.1);
           state.rotationY += rotationSpeed * dt;
       }
       
       mainGroup.rotation.y = state.rotationY;
-      mainGroup.rotation.x += (0 - mainGroup.rotation.x) * 2.0 * dt;
 
       let currentFormation: THREE.Vector3[] = [];
       if (state.mode === 'MESSAGE_LOVE') currentFormation = formationsRef.current.love;
@@ -324,58 +318,51 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, {}>((props, ref) => {
         let targetScale = p.baseScale;
         let lerpFactor = 2.5;
 
-        // Message au premier plan (Z=30 pour être très proche de la caméra)
+        // Message Handling
         if (p.isDust && currentFormation.length > 0) {
             const pointIdx = dustCounter % currentFormation.length;
             const rawTarget = currentFormation[pointIdx];
             
-            // On projette à Z=30 devant la caméra dans le monde
+            // Project to foreground (Z=30)
             const heroWorldPos = new THREE.Vector3(rawTarget.x, rawTarget.y, 30);
-            
-            // On neutralise la rotation du mainGroup pour que le texte reste face écran
             const invMatrix = new THREE.Matrix4().copy(mainGroup.matrixWorld).invert();
             targetPos = heroWorldPos.applyMatrix4(invMatrix);
             
-            targetScale = 0.9;
-            lerpFactor = 9.0; 
+            targetScale = 0.8;
+            lerpFactor = 8.0; 
             
             if (p.mesh.material) {
                 p.mesh.material.opacity = 1.0;
                 if (state.mode === 'MESSAGE_HEART') {
                     p.mesh.material.color.setHex(0xff0000);
-                    p.mesh.scale.setScalar(targetScale * (1.0 + Math.sin(time * 5) * 0.2)); // Battement de coeur
+                    p.mesh.scale.setScalar(targetScale * (1.1 + Math.sin(time * 6) * 0.2));
                 } else {
                     p.mesh.material.color.setHex(0xfff4d1);
                 }
             }
             dustCounter++;
         } else if (p.isDust) {
-            if (p.mesh.material) p.mesh.material.opacity = 0.6;
+            if (p.mesh.material) p.mesh.material.opacity = 0.5;
         }
 
-        // Photo Focus
+        // Photo Focus Logic
         if (state.mode === 'FOCUS' && p.mesh === state.focusTarget) {
-            const cameraForward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            const heroWorldPos = new THREE.Vector3().copy(camera.position).add(cameraForward.multiplyScalar(15));
+            const heroWorldPos = new THREE.Vector3(0, 0, 32);
             const invMatrix = new THREE.Matrix4().copy(mainGroup.matrixWorld).invert();
             targetPos = heroWorldPos.applyMatrix4(invMatrix);
-            targetScale = 6.5; 
-            lerpFactor = 7.0;
+            targetScale = 6.0; 
+            lerpFactor = 6.0;
             p.mesh.lookAt(camera.position);
         } else if (state.mode === 'FOCUS') {
-            targetScale *= 0.4;
+            targetScale *= 0.3;
         }
 
         p.mesh.position.lerp(targetPos, lerpFactor * dt);
-        const s = new THREE.Vector3(targetScale, targetScale, targetScale);
-        p.mesh.scale.lerp(s, 4.0 * dt);
+        p.mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 4.0 * dt);
 
         if (p.mesh !== state.focusTarget && !isInMessageMode) {
-            if (state.mode === 'TREE') p.mesh.rotation.y += 0.4 * dt;
-            else {
-                p.mesh.rotation.x += p.spinSpeed.x * dt;
-                p.mesh.rotation.y += p.spinSpeed.y * dt;
-            }
+            p.mesh.rotation.x += p.spinSpeed.x * dt;
+            p.mesh.rotation.y += p.spinSpeed.y * dt;
         }
       });
 

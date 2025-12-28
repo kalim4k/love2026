@@ -1,0 +1,7 @@
+{
+  "name": "Noel V2 - Interactive Holiday Magic",
+  "description": "A high-performance 3D Christmas experience featuring particle physics, hand gesture control via MediaPipe, and AI-powered festive greetings.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
